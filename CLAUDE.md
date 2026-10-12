@@ -20,8 +20,12 @@
 
 - 母艦 `ai-context-engine` のコードを import する / 母艦 repo へ直接書き込む(A 型の状態ファイル更新を除く)。
 - 衛星のパスを母艦のコードに直書きする(登録簿経由にする)。
-- <この衛星固有の禁止事項(上流への関与禁止・本番ポート・秘密の置き場 など)>
+- 公開リポジトリなので、秘密・個人の情報・非公開の衛星 (コーチ) の判断のコードを入れない。
+- 上流 (Pokémon Showdown・poke-env) への PR や Issue は出さない。上流の LICENSE と NOTICE.md の出典を消さない。
+- Pokémon の名前・ロゴを、この製品の名前や宣伝に使わない (NOTICE.md の商標の但し書きを守る)。
 
 ## この衛星固有の指示
 
-<設計書の場所・起動手順・検証の型・罠 など。無ければ削除>
+- 使い方は README.md、やり取りの形式は sim/PROTOCOL.md。上流の取り込み元は NOTICE.md。
+- 検証: `cd sim && uv run pytest -q` / サーバーの型検査 `cd server && npx tsc --noEmit -p .` / つなぎの確認は README の Quick start。
+- 罠: プラグインを直したら `node build` してからサーバーを再起動する (動いているのは dist/)。Showdown は既定で 1 発言 0.6 秒の制限があり、config の `nothrottle` で外している。天鳳 JSON の大明槓は、打牌欄の 0 が嶺上牌のツモより前にある。

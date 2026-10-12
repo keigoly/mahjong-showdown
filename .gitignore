@@ -6,3 +6,10 @@ __pycache__/
 *.log
 state/
 .claude/
+# mahjong-showdown
+server/dist/
+server/node_modules/
+server/logs/
+data/
+*.npz
+uv.lock.bak
