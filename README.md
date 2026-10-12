@@ -32,6 +32,7 @@ Your own bot classes can play too: `--challenger "py:mybots.nn:NetPlayer?model=/
 
 For long self-play runs, start the server with `MJ_LOG_EVERY=50` to keep one table log in 50
 (logs go to `server/logs/mahjong/<YYYY-MM>/`, about 8 KB each; `0` keeps none).
+`MJ_BIND=127.0.0.1` makes the server listen on this machine only (overrides `bindaddress` in `config/config.js`).
 
 ## Play in the browser (practice tables with advice)
 
@@ -94,6 +95,7 @@ AI 同士の大量の自己対戦で、打ち方を比べたり鍛えたりす�
 配牌・ツモの運が打ち消され、打ち方の差だけが平均順位に出ます (同じ強さなら 2.5)。
 自作のボットは `py:モジュール:クラス?名前=値;名前=値` で指定できます (? の後ろはクラスの引数)。
 大量の自己対戦では `MJ_LOG_EVERY=50` でサーバーを起動すると、牌譜を 50 卓に 1 つだけ残します。
+`MJ_BIND=127.0.0.1` を付けると、設定ファイルに関係なく自分の機械だけで待ち受けます (常駐の自己対戦向け)。
 
 ### ブラウザで打つ (練習卓と助言)
 

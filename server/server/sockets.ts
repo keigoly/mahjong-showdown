@@ -79,6 +79,8 @@ export const Sockets = new class {
 				port = cloudenv.get('PORT', port);
 			} catch {}
 		}
+		// mahjong-showdown: MJ_BIND overrides the listen address (e.g. 127.0.0.1 for a resident self-play server)
+		if (process.env.MJ_BIND) bindAddress = process.env.MJ_BIND;
 		if (bindAddress !== undefined) {
 			Config.bindaddress = bindAddress;
 		}
