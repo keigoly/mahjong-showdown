@@ -27,6 +27,12 @@ uv run python -m mahjong_env.selfplay duplicate --challenger random --baseline e
 `duplicate` plays one challenger against three baselines on the same walls, rotating the challenger through the four
 seats, so luck cancels out and only the difference in play shows in the average rank (2.5 = equal strength).
 
+Your own bot classes can play too: `--challenger "py:mybots.nn:NetPlayer?model=/models/v2.onnx;temperature=0.5"`
+(everything after `?` is passed to the class as keyword arguments, so two versions of one bot can share a table).
+
+For long self-play runs, start the server with `MJ_LOG_EVERY=50` to keep one table log in 50
+(logs go to `server/logs/mahjong/<YYYY-MM>/`, about 8 KB each; `0` keeps none).
+
 ## Writing a bot
 
 ```python
@@ -70,3 +76,5 @@ AI 同士の大量の自己対戦で、打ち方を比べたり鍛えたりす�
 
 `duplicate` (複製対局) は、挑戦者 1 体と基準 3 体を同じ山で席を 4 通りに入れ替えて打たせます。
 配牌・ツモの運が打ち消され、打ち方の差だけが平均順位に出ます (同じ強さなら 2.5)。
+自作のボットは `py:モジュール:クラス?名前=値;名前=値` で指定できます (? の後ろはクラスの引数)。
+大量の自己対戦では `MJ_LOG_EVERY=50` でサーバーを起動すると、牌譜を 50 卓に 1 つだけ残します。

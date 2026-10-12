@@ -65,14 +65,33 @@ def run(players: List[MahjongPlayer], tables: int) -> Dict:
     return summary
 
 
+def _parse_value(v: str):
+    if v.lower() in ("true", "false"):
+        return v.lower() == "true"
+    for conv in (int, float):
+        try:
+            return conv(v)
+        except ValueError:
+            pass
+    return v
+
+
+def parse_py_spec(kind: str):
+    """外の選手クラスの指定 "py:パッケージ.モジュール:クラス[?名前=値;名前=値]" を (モジュール, クラス名, 引数) に分ける。
+    ? の後ろはクラスの引数 (例 py:mybots.nn:NetPlayer?model=/models/v2.onnx;temperature=0.5)。"""
+    target, _, query = kind[3:].partition("?")
+    module, _, cls_name = target.rpartition(":")
+    kw = {k: _parse_value(v) for k, v in (item.split("=", 1) for item in query.split(";") if item)}
+    return module, cls_name, kw
+
+
 def _make(kind: str, server: ServerConfiguration) -> MahjongPlayer:
     if kind.startswith("py:"):
-        # 外の選手クラス: "py:パッケージ.モジュール:クラス" (例 py:mjcoach.online:CoachPlayer)
         import importlib
 
-        module, _, cls_name = kind[3:].rpartition(":")
+        module, cls_name, kw = parse_py_spec(kind)
         cls = getattr(importlib.import_module(module), cls_name)
-        return cls(AccountConfiguration.generate(cls_name[:10], rand=True), server_configuration=server)
+        return cls(AccountConfiguration.generate(cls_name[:10], rand=True), server_configuration=server, **kw)
     name, _, opts = kind.partition(":")
     cls = KINDS[name]
     if cls is EfficiencyPlayer and opts:

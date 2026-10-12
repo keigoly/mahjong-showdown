@@ -44,6 +44,9 @@ const REPO_ROOT = path.resolve(process.cwd(), '..');
 const SIM_SRC = path.join(REPO_ROOT, 'sim', 'src');
 const DEFAULT_TIMEOUT = 60;
 const LOG_DIR = path.join(process.cwd(), 'logs', 'mahjong');
+// Save one log in every MJ_LOG_EVERY finished tables (large self-play runs fill the disk otherwise). 0 = none.
+const LOG_EVERY = Number(process.env.MJ_LOG_EVERY ?? 1);
+let finishedTables = 0;
 
 function simPython(): string {
 	if (process.env.MJSIM_PYTHON) return process.env.MJSIM_PYTHON;
@@ -233,7 +236,7 @@ export class MahjongTable extends Rooms.RoomGame<MahjongPlayer> {
 		if (this.ended) return;
 		this.result = result;
 		this.room.add(`|mj|gameend|${JSON.stringify(result)}`).update();
-		if (log) {
+		if (log && LOG_EVERY > 0 && finishedTables++ % LOG_EVERY === 0) {
 			try {
 				const month = new Date().toISOString().slice(0, 7);
 				const dir = path.join(LOG_DIR, month);
