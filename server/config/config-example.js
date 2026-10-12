@@ -303,7 +303,9 @@ exports.monitorminpunishments = 3;
 /**
  * Turns off all time-based throttles - rename, challenges, laddering, etc.
  */
-exports.nothrottle = false;
+// mahjong-showdown: AI 同士の自己対戦が主目的なので、発言間隔の制限 (1 発言 0.6 秒) を既定で外す。
+// 一般に公開するサーバーでは false に戻すこと。
+exports.nothrottle = true;
 
 /**
  * Removes all ip-based alt checking.
