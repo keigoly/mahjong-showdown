@@ -1,0 +1,98 @@
+name: Check examples run
+on:
+  push:
+    branches:
+      - "master"
+  pull_request:
+    branches:
+      - "master"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v7
+
+      # Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: 3.11
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Install Python Kernel
+        run: |
+          uv pip install -p .venv/bin/python ipykernel
+          uv run python -m ipykernel install --user --name python3
+
+      - name: Build package
+        run: uv build
+
+      - name: Install built package
+        run: uv pip install -p .venv/bin/python --reinstall dist/*.whl
+
+      - name: Remove source
+        run: rm -rf ./src
+
+      - name: Setup node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Checkout PS
+        uses: actions/checkout@v7
+        with:
+          repository: smogon/pokemon-showdown
+          ref: '2ddfa0476f8207e12e204b1c69f7c7683b17633c'
+          path: pokemon-showdown
+          submodules: recursive
+
+      - name: Get last showdown commit hash
+        id: showdown-hash
+        run: |
+          cd pokemon-showdown/
+          export hash=`git log -1 --pretty=format:%H`
+          echo "hash=$hash" >> $GITHUB_OUTPUT
+
+      - name: Restore server cache
+        uses: actions/cache@v6
+        with:
+          path: pokemon-showdown/node_modules
+          key: showdown-${{ runner.os }}-node24-${{ steps.showdown-hash.outputs.hash }}
+          restore-keys: showdown-${{ runner.os }}-node24-
+
+      - name: Install PS dependencies and start server
+        timeout-minutes: 3
+        run: bash scripts/ci_setup_showdown.sh
+
+      - name: Run example notebooks
+        run: |
+            for notebook in $(find examples -name '*.ipynb'); do
+              uv run --no-sync jupyter nbconvert --to notebook --execute "$notebook" --output temp.ipynb
+              if [ $? -ne 0 ]; then
+              echo "Execution of $notebook failed"
+              exit 1
+              fi
+              rm examples/temp.ipynb
+            done
+
+      - name: Upload Showdown log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: showdown-examples
+          path: pokemon-showdown/server.log
+          if-no-files-found: ignore
