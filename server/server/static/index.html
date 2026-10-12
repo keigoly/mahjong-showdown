@@ -181,7 +181,9 @@ function tileText(t) {
 	return (t[0] === '0' ? '赤5' : t[0]) + SUIT[t[1]];
 }
 function prettyTiles(text) {
-	return String(text || '').replace(/(^|[^0-9A-Za-z])([0-9])([mps])(?![A-Za-z])/g, (_, pre, n, s) => pre + (n === '0' ? '赤5' : n) + SUIT[s]);
+	// 単独の符号 (打5p) と、続けて書いた符号 (チー 3p4p0p) の両方を変える。英単語の中の文字は変えない
+	return String(text || '').replace(/(?:(?<![0-9A-Za-z.])|(?<=[0-9][mps]))([0-9])([mps])(?![A-Za-z])/g,
+		(_, n, s) => (n === '0' ? '赤5' : n) + SUIT[s]);
 }
 function tileSortKey(t) {
 	if (HONOR.includes(t)) return 100 + HONOR.indexOf(t);
