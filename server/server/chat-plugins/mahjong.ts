@@ -13,11 +13,17 @@
  *   /choose RQID CHOICE      - answer a request (in the table room). CHOICE: "discard 5p [riichi]" / "call N" / "pass" / "win"
  *                              (/mj choose is the same)
  *   /mj autoplay on|off      - let the simulator play your seat (e.g. when you have to leave)
+ *   /mj advice on|off        - turn the advisor on or off for your seat (practice tables only)
  *
  * Messages:
  *   |request|{json}          - only to the player who must decide (contains the full visible state)
  *   |mj|...                  - public events for everyone in the room (see sim/PROTOCOL.md)
+ *   |mj|advice|{json}        - only to the player: the advisor's answer to the pending request (practice tables only)
  *   |mj|gameend|{json}       - final result (names, scores, ranks, points)
+ *
+ * Advice: if MJ_ADVISOR (or Config.mjadvisor) is set to an advisor's URL (e.g. http://127.0.0.1:8787/advise,
+ * `python -m mjsim.advisor`), each request on a practice table (/mj play: one person + 3 simulator bots) is also
+ * sent to the advisor, and its answer goes to that player only. Tables with two or more people never get advice.
  *
  * Derived from Pokémon Showdown's RoomGame plumbing (MIT). See NOTICE in the repository root.
  */
@@ -47,6 +53,11 @@ const LOG_DIR = path.join(process.cwd(), 'logs', 'mahjong');
 // Save one log in every MJ_LOG_EVERY finished tables (large self-play runs fill the disk otherwise). 0 = none.
 const LOG_EVERY = Number(process.env.MJ_LOG_EVERY ?? 1);
 let finishedTables = 0;
+const ADVISOR_TIMEOUT_MS = Number(process.env.MJ_ADVISOR_TIMEOUT_MS || 30000);
+
+function advisorUrl(): string {
+	return process.env.MJ_ADVISOR || (Config as AnyObject).mjadvisor || '';
+}
 
 function simPython(): string {
 	if (process.env.MJSIM_PYTHON) return process.env.MJSIM_PYTHON;
@@ -134,6 +145,8 @@ export const MjSim = new MjSimPool();
 export class MahjongPlayer extends Rooms.RoomGamePlayer<MahjongTable> {
 	seat: number;
 	pending: { rqid: number, request: AnyObject } | null = null;
+	/** 練習卓で助言を受けるか (/mj advice on|off)。 */
+	advice = true;
 	constructor(user: User | string | null, game: MahjongTable, seat: number) {
 		super(user, game, seat + 1);
 		this.seat = seat;
@@ -149,6 +162,8 @@ export class MahjongTable extends Rooms.RoomGame<MahjongPlayer> {
 	bots: (string | null)[];
 	tableId: string;
 	result: AnyObject | null = null;
+	/** 練習卓 = 人が 1 人だけ (残りはシミュレーターのボット)。助言はこの卓だけ。 */
+	practice: boolean;
 
 	constructor(room: Room, users: (User | null)[], options: { seed?: number, rules?: string, timeout?: number, calls?: boolean }) {
 		super(room);
@@ -156,6 +171,7 @@ export class MahjongTable extends Rooms.RoomGame<MahjongPlayer> {
 		this.tableId = room.roomid;
 		this.seed = options.seed ?? Math.floor(Math.random() * 2 ** 31);
 		this.bots = users.map(u => (u ? null : 'efficiency'));
+		this.practice = users.filter(u => u).length === 1;
 		const names: string[] = [];
 		users.forEach((user, seat) => {
 			const player = new MahjongPlayer(user ?? `Bot ${seat + 1}`, this, seat);
@@ -170,7 +186,39 @@ export class MahjongTable extends Rooms.RoomGame<MahjongPlayer> {
 			type: 'start', id: this.tableId, names, seed: this.seed, rules: options.rules ?? 'tenhou-houou',
 			calls: options.calls ?? true, timeout: options.timeout ?? DEFAULT_TIMEOUT, bots: this.bots,
 		});
-		room.add(`|mj|init|${names.join(',')}|${this.seed}`).update();
+		room.add(`|mj|init|${names.join(',')}|${this.seed}`);
+		if (this.practice) room.add(`|mj|practice|${advisorUrl() ? 'advice' : 'noadvice'}`);
+		room.update();
+	}
+
+	/** 選手に送る要求の行。練習卓では、助言が後から届くかどうか (advice) も添える。 */
+	requestLine(player: MahjongPlayer) {
+		const { rqid, request } = player.pending!;
+		const advice = this.advising(player);
+		return `|request|${JSON.stringify({ rqid, ...request, practice: this.practice, advice })}`;
+	}
+
+	advising(player: MahjongPlayer) {
+		return this.practice && player.advice && !!advisorUrl();
+	}
+
+	/** 助言役に要求を送り、答えをその選手にだけ送る。答える前に選手が打ったら捨てる。 */
+	async advise(player: MahjongPlayer, rqid: number, request: AnyObject) {
+		let advice: AnyObject;
+		const t0 = Date.now();
+		try {
+			const res = await fetch(advisorUrl(), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ rqid, request: { rqid, ...request } }),
+				signal: AbortSignal.timeout(ADVISOR_TIMEOUT_MS),
+			});
+			advice = res.ok ? await res.json() : { ok: false, error: `advisor returned HTTP ${res.status}` };
+		} catch (err: any) {
+			advice = { ok: false, error: err?.name === 'TimeoutError' ? 'advisor timed out' : `advisor unavailable (${err?.message})` };
+		}
+		if (this.ended || player.pending?.rqid !== rqid) return;
+		player.sendRoom(`|mj|advice|${JSON.stringify({ ...advice, rqid, wait_ms: Date.now() - t0 })}`);
 	}
 
 	override makePlayer(user: User | string | null) {
@@ -187,7 +235,8 @@ export class MahjongTable extends Rooms.RoomGame<MahjongPlayer> {
 			const player = this.players[msg.player!];
 			if (!player) break;
 			player.pending = { rqid: msg.rqid!, request: msg.request! };
-			player.sendRoom(`|request|${JSON.stringify({ rqid: msg.rqid, ...msg.request })}`);
+			player.sendRoom(this.requestLine(player));
+			if (this.advising(player)) void this.advise(player, msg.rqid!, msg.request!);
 			break;
 		}
 		case 'error':
@@ -224,11 +273,20 @@ export class MahjongTable extends Rooms.RoomGame<MahjongPlayer> {
 		MjSim.send(this.tableId, { type: 'autoplay', id: this.tableId, player: player.seat, on });
 	}
 
+	setAdvice(user: User, on: boolean) {
+		const player = this.playerTable[user.id];
+		if (!player) throw new Chat.ErrorMessage(`You are not a player at this table.`);
+		if (!this.practice) throw new Chat.ErrorMessage(`Advice is only for practice tables (/mj play).`);
+		player.advice = on;
+		if (on && player.pending && this.advising(player)) void this.advise(player, player.pending.rqid, player.pending.request);
+	}
+
 	override onConnect(user: User) {
 		// 再接続したら、待っている要求を送り直す
 		const player = this.playerTable[user.id];
 		if (player?.pending) {
-			player.sendRoom(`|request|${JSON.stringify({ rqid: player.pending.rqid, ...player.pending.request })}`);
+			player.sendRoom(this.requestLine(player));
+			if (this.advising(player)) void this.advise(player, player.pending.rqid, player.pending.request);
 		}
 	}
 
@@ -329,6 +387,12 @@ export const commands: Chat.ChatCommands = {
 			game.autoplay(user, target.trim() !== 'off');
 			this.sendReply(`|mj|autoplay|${target.trim() !== 'off' ? 'on' : 'off'}`);
 		},
+		advice(target, room, user) {
+			const game = this.requireGame(MahjongTable);
+			const on = target.trim() !== 'off';
+			game.setAdvice(user, on);
+			this.sendReply(`|mj|advicemode|${on ? 'on' : 'off'}`);
+		},
 		''(target, room, user) {
 			this.parse('/help mj');
 		},
@@ -340,5 +404,6 @@ export const commands: Chat.ChatCommands = {
 		`/mj play - Play against 3 simulator bots.`,
 		`/mj choose RQID CHOICE - Answer a request: "discard 5p [riichi]", "call N", "pass", "win".`,
 		`/mj autoplay on|off - Let the simulator play your seat.`,
+		`/mj advice on|off - Turn the advisor on or off for your seat (practice tables only).`,
 	],
 };

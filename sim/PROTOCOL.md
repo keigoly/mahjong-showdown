@@ -12,17 +12,21 @@ Commands (send from any room unless noted):
 | `/mj play` | Play against 3 simulator bots. |
 | `/choose RQID CHOICE` (in the table room) | Answer request `RQID`. Same as `/mj choose`. |
 | `/mj autoplay on\|off` (in the table room) | Let the simulator play your seat. |
+| `/mj advice on\|off` (in the table room) | Turn the advisor on or off for your seat (practice tables only). |
 
 Table rooms are named `mahjong-…`. Messages in a table room:
 
 - `|request|{json}` — only to the player who must decide.
 - `|mj|…` — public events (below).
 - `|mj|gameend|{"names":[…],"scores":[…],"ranks":[…],"points":[…]}` — result.
+- `|mj|practice|advice` or `|mj|practice|noadvice` — this is a practice table (`/mj play`), with or without an advisor.
+- `|mj|advice|{json}` — only to the player: the advisor's answer to the pending request (see [Advisor](#advisor)).
 - `|error|text` — your choice was invalid (the request is sent again).
 
 ### Requests
 
-Every request has `rqid`, `type` and `state` (everything the player can see):
+Every request has `rqid`, `type` and `state` (everything the player can see). The server adds `practice` (true on
+practice tables) and `advice` (true when an advisor's answer will follow as `|mj|advice|`):
 
 ```json
 {"rqid": 7, "type": "discard", "can_riichi": ["7s"],
@@ -62,6 +66,27 @@ accepts wins.
 |mj|ryuukyoku|1,0,0,1|PAYMENTS
 |mj|end|SCORES|RANKS|POINTS
 ```
+
+## Advisor
+
+On practice tables (one person + three simulator bots, `/mj play`), the server sends each request of that person to
+the advisor set by `MJ_ADVISOR` (or `Config.mjadvisor`) and passes the answer on to that person only. Tables with two
+or more people never get advice. The person can turn it off with `/mj advice off`.
+
+```
+POST {MJ_ADVISOR}            {"rqid": 7, "request": {…the request JSON above…}}
+→ 200 {"ok": true, "name": "efficiency", "choice": "discard 5p riichi",
+       "headline": "打5p 立直 (向聴 0・受け入れ 8 枚)",
+       "candidates": [{"choice": "discard 5p", "label": "5p", "plan": "立直",
+                       "stats": {"win": 0.34, "dealin": 0.06, "ev": 12.3, "shanten": 0, "ukeire": 8}}],
+       "lines": ["…reasons, one per line…"], "ms": 812}
+→ 200 {"ok": false, "error": "…"}
+```
+
+`choice` is a valid answer to the request (the client offers it as 「推奨で打つ」). `candidates`, `stats`, `plan` and
+`lines` are optional; the client shows `win`/`dealin` as percentages, `ev` with a sign and the others as they are.
+The server waits up to `MJ_ADVISOR_TIMEOUT_MS` (default 30000) and drops answers that arrive after the person chose.
+`python -m mjsim.advisor` is an example advisor (the efficiency bot). `GET /health` answers `{"ok": true, "name": …}`.
 
 ## Server ⇄ simulator (`python -m mjsim.stream`, JSON lines on stdin/stdout)
 

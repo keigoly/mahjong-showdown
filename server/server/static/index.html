@@ -1,15 +1,731 @@
 <!DOCTYPE html>
-<script>
-var host = document.location.hostname.replace(/-/g, '=').replace(/\./g, '-').replace(/:/g, '--').replace(/=/g, '---');
-var currentPort = document.location.port || (document.location.protocol === 'https:' ? '443' : '80');
-var defaultPort = document.location.protocol === 'https:' ? '443' : '8000';
-var suffix = (currentPort !== defaultPort ? '--' + currentPort : '');
-var protocol = 'https:';
-if (document.location.protocol !== 'https:' && host !== 'localhost') {
-	protocol = 'http:';
-	suffix += '.insecure';
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mahjong Showdown</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+	--felt: #17573f; --felt-dark: #0e3527; --panel: #fbfaf6; --panel-ink: #22221f; --muted: #6f6c63; --line: #dcd7c9;
+	--tile: #fffdf7; --tile-edge: #c9c1aa; --m: #b3261e; --p: #1d5aa6; --s: #1f7a45; --z: #2b2b2b;
+	--hl: #f0b400; --warn: #b3261e; --btn: #2d3a33; --btn-ink: #fff;
 }
-document.location.replace(protocol + '//' + host + suffix + '.psim.us' + document.location.pathname);
+@media (prefers-color-scheme: dark) {
+	:root { --panel: #1d221f; --panel-ink: #e8ebe7; --muted: #a3a99f; --line: #38403a; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif; background: var(--felt-dark); color: var(--panel-ink); }
+header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 16px; background: #0b231a; color: #eef3ee; }
+header h1 { font-size: 16px; margin: 0 6px 0 0; }
+header .status { font-size: 13px; opacity: .85; flex: 1 1 auto; }
+header input { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: 6px; border: 1px solid #4b5d53; background: #163126; color: #fff; width: 9.5em; }
+button { font: inherit; font-size: 14px; cursor: pointer; border-radius: 8px; border: 1px solid transparent; padding: 6px 12px; background: var(--btn); color: var(--btn-ink); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: #d99a06; color: #1b1300; font-weight: 700; }
+button.ghost { background: transparent; border-color: #8fa398; color: inherit; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; padding: 12px 16px 24px; max-width: 1400px; margin: 0 auto; }
+@media (max-width: 980px) { main { grid-template-columns: minmax(0, 1fr); } }
+#board { display: grid; gap: 8px; grid-template-areas: ". top ." "left center right" ". bottom ."; grid-template-columns: minmax(0, 1fr) minmax(140px, 210px) minmax(0, 1fr); background: var(--felt); border-radius: 14px; padding: 10px; }
+@media (max-width: 680px) { #board { grid-template-areas: "top" "left" "right" "center" "bottom"; grid-template-columns: minmax(0, 1fr); } }
+.seat { background: rgba(0, 0, 0, .2); border-radius: 10px; padding: 6px 8px; color: #f2f5f1; min-height: 80px; min-width: 0; }
+.seat.turn { outline: 2px solid var(--hl); }
+.seat .who { display: flex; gap: 8px; align-items: baseline; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
+.seat .wind { font-weight: 700; }
+.seat .score { font-variant-numeric: tabular-nums; }
+.seat .mark { background: #fff; color: #111; border-radius: 3px; font-size: 11px; padding: 0 4px; }
+.river { display: grid; grid-template-columns: repeat(6, max-content); gap: 2px; }
+.melds { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.meld { display: inline-flex; gap: 1px; }
+#center { grid-area: center; background: rgba(0, 0, 0, .3); border-radius: 10px; color: #f6f8f5; padding: 8px; display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; text-align: center; }
+#center .label { font-size: 18px; font-weight: 700; }
+#center .sub { font-size: 12px; opacity: .85; }
+.tile { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 40px; background: var(--tile); border: 1px solid var(--tile-edge); border-bottom-width: 3px; border-radius: 5px; color: var(--z); line-height: 1; padding: 0; font-weight: 700; user-select: none; flex: 0 0 auto; }
+.tile b { font-size: 17px; }
+.tile i { font-style: normal; font-size: 10px; margin-top: 2px; }
+.tile.m { color: var(--m); } .tile.p { color: var(--p); } .tile.s { color: var(--s); }
+.tile.red { background: #ffe3de; }
+.tile.z b { font-size: 18px; }
+.tile.chun { color: var(--m); } .tile.hatsu { color: var(--s); }
+.tile.sm { width: 22px; height: 30px; border-bottom-width: 2px; border-radius: 4px; }
+.tile.sm b { font-size: 13px; } .tile.sm.z b { font-size: 14px; } .tile.sm i { font-size: 8px; margin-top: 1px; }
+.tile.tsumogiri { filter: brightness(.88); }
+.tile.riichi { box-shadow: 0 0 0 2px var(--hl); }
+.tile.called { opacity: .3; }
+#hand-bar { background: var(--panel); border-radius: 14px; padding: 10px 12px; margin-top: 10px; }
+.hand { display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-end; }
+.hand .tile { width: clamp(20px, 5.4vw, 44px); height: clamp(28px, 7.6vw, 60px); }
+.hand .tile b { font-size: clamp(14px, 3.4vw, 24px); }
+.hand .tile i { font-size: clamp(8px, 1.7vw, 13px); }
+.hand .gap { width: 8px; }
+@media (max-width: 680px) {
+	main { padding: 8px 8px 16px; }
+	.hand { gap: 2px; flex-wrap: nowrap; overflow-x: auto; }
+	#hand-bar { position: sticky; bottom: 0; z-index: 5; box-shadow: 0 -6px 18px rgba(0, 0, 0, .35); }
+}
+.hand button.tile:not(:disabled):hover { transform: translateY(-4px); }
+.hand button.tile:disabled { opacity: .5; }
+.hand .tile.rec { outline: 3px solid var(--hl); outline-offset: 1px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; min-height: 36px; }
+.actions .hint { font-size: 14px; color: var(--muted); }
+button.on { background: var(--warn); }
+aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel { background: var(--panel); border-radius: 12px; padding: 12px; }
+.panel h2 { font-size: 15px; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.panel h2 .grow { flex: 1; }
+.panel .note { font-size: 13px; color: var(--muted); }
+#advice .headline { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+#advice table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+#advice th, #advice td { text-align: left; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+#advice td.num, #advice th.num { text-align: right; }
+#advice tr.best td { font-weight: 700; }
+#advice ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+#advice .err { color: var(--warn); font-size: 13px; }
+#log { font-size: 12.5px; max-height: 320px; overflow-y: auto; line-height: 1.55; }
+#log div.k { margin-top: 6px; font-weight: 700; }
+#log div.e { color: var(--warn); }
+.switch { font-size: 13px; display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+#result { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#result[hidden] { display: none; }
+#result .panel { max-width: 460px; width: 100%; }
+#result table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-variant-numeric: tabular-nums; }
+#result td, #result th { padding: 6px; border-bottom: 1px solid var(--line); text-align: left; }
+#result td.num { text-align: right; }
+#toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: #222; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px); }
+#toast[hidden] { display: none; }
+</style>
+</head>
+<body>
+<header>
+	<h1>Mahjong Showdown</h1>
+	<span class="status" id="status">接続しています…</span>
+	<input id="name" maxlength="18" autocomplete="off" aria-label="名前">
+	<button class="ghost" id="login">名前を変える</button>
+	<button class="primary" id="play" disabled>練習対局を始める</button>
+</header>
+<main>
+	<section>
+		<div id="board">
+			<div class="seat" id="seat-2" style="grid-area: top"></div>
+			<div class="seat" id="seat-3" style="grid-area: left"></div>
+			<div id="center"><div class="label">待機中</div><div class="sub">「練習対局を始める」で、ボット 3 人と打ちます</div></div>
+			<div class="seat" id="seat-1" style="grid-area: right"></div>
+			<div class="seat" id="seat-0" style="grid-area: bottom"></div>
+		</div>
+		<div id="hand-bar">
+			<div class="hand" id="hand"></div>
+			<div class="actions" id="actions"><span class="hint">対局が始まると、ここに手牌と操作が出ます</span></div>
+		</div>
+	</section>
+	<aside>
+		<div class="panel" id="advice-panel">
+			<h2><span class="grow">助言</span><label class="switch"><input type="checkbox" id="advice-on"> 表示する</label></h2>
+			<div id="advice"><div class="note">練習卓 (自分 + ボット 3 人) で、助言役がつながっているときに出ます。人が 2 人以上いる卓では出ません。</div></div>
+		</div>
+		<div class="panel">
+			<h2>経過</h2>
+			<div id="log"></div>
+		</div>
+	</aside>
+</main>
+<div id="result" hidden><div class="panel"><h2>終局</h2><div id="result-body"></div><button class="primary" id="again">もう一度打つ</button> <button class="ghost" id="close-result" style="color:inherit;border-color:var(--line)">閉じる</button></div></div>
+<div id="toast" hidden></div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const WS_URL = params.get('server') ||
+	(location.protocol === 'https:' ? 'wss://' : 'ws://') + (location.host || 'localhost:8000') + '/showdown/websocket';
+const store = {
+	get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } },
+	set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+const HONOR = ['東', '南', '西', '北', '白', '發', '中'];
+const SUIT = { m: '萬', p: '筒', s: '索' };
+const WINDS = ['東', '南', '西', '北'];
+const REL = ['自分', '下家', '対面', '上家'];
+const CALL_JA = { pon: 'ポン', chi: 'チー', kan: 'カン', daiminkan: '大明槓', ankan: '暗槓', kakan: '加槓' };
+const STAT = { win: ['和了', 'pct'], dealin: ['放銃', 'pct'], ev: ['期待値', 'ev'], shanten: ['向聴', 'int'], ukeire: ['受入', 'int'] };
+
+let ws = null;
+let myName = '';
+let loggedIn = false;
+let room = '';
+let req = null;            // いま答えるべき要求
+let advice = null;         // その要求への助言
+let adviceWaiting = false;
+let practice = false;
+let advisorUp = false;
+let riichiMode = false;
+let adviceOn = store.get('mj.advice', '1') === '1';
+let nameRetries = 0;
+let T = freshTable();
+
+function freshTable() {
+	return {
+		names: ['', '', '', ''], me: 0, label: '', honba: 0, kyotaku: 0, dealer: 0, scores: [25000, 25000, 25000, 25000],
+		wall: null, dora: [], rivers: [[], [], [], []], melds: [[], [], [], []], riichi: [false, false, false, false],
+		hand: [], drawn: null, turn: null, started: false,
+	};
+}
+
+const toID = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+const seatOf = p => parseInt(String(p).slice(1), 10) - 1;
+const kindOf = t => (t && t[0] === '0' ? '5' + t[1] : t);
+const sameKind = (a, b) => kindOf(a) === kindOf(b);
+function tileText(t) {
+	if (!t) return '';
+	if (HONOR.includes(t)) return t;
+	return (t[0] === '0' ? '赤5' : t[0]) + SUIT[t[1]];
+}
+function prettyTiles(text) {
+	return String(text || '').replace(/(^|[^0-9A-Za-z])([0-9])([mps])(?![A-Za-z])/g, (_, pre, n, s) => pre + (n === '0' ? '赤5' : n) + SUIT[s]);
+}
+function tileSortKey(t) {
+	if (HONOR.includes(t)) return 100 + HONOR.indexOf(t);
+	return 'mps'.indexOf(t[1]) * 10 + (t[0] === '0' ? 5 : +t[0]) - (t[0] === '0' ? 0.5 : 0);
+}
+function el(tag, cls, text) {
+	const e = document.createElement(tag);
+	if (cls) e.className = cls;
+	if (text !== undefined) e.textContent = text;
+	return e;
+}
+function tileEl(t, opts = {}) {
+	const e = el(opts.button ? 'button' : 'span', 'tile');
+	e.dataset.tile = t;
+	e.setAttribute('aria-label', tileText(t));
+	if (HONOR.includes(t)) {
+		e.classList.add('z');
+		if (t === '中') e.classList.add('chun');
+		if (t === '發') e.classList.add('hatsu');
+		e.append(el('b', '', t));
+	} else {
+		e.classList.add(t[1]);
+		if (t[0] === '0') e.classList.add('red');
+		e.append(el('b', '', t[0] === '0' ? '5' : t[0]), el('i', '', SUIT[t[1]]));
+	}
+	if (opts.small) e.classList.add('sm');
+	return e;
+}
+
+function toast(text) {
+	const t = $('toast');
+	t.textContent = text;
+	t.hidden = false;
+	clearTimeout(toast.timer);
+	toast.timer = setTimeout(() => { t.hidden = true; }, 4000);
+}
+function log(text, cls) {
+	const box = $('log');
+	box.append(el('div', cls || '', text));
+	while (box.childElementCount > 300) box.firstChild.remove();
+	box.scrollTop = box.scrollHeight;
+}
+function setStatus(text) { $('status').textContent = text; }
+function nameOf(seat) { return T.names[seat] || `席${seat + 1}`; }
+function relName(seat) { return seat === T.me ? '自分' : `${nameOf(seat)} (${REL[(seat - T.me + 4) % 4]})`; }
+
+// ---- 接続とログイン ----
+function connect() {
+	setStatus('接続しています…');
+	ws = new WebSocket(WS_URL);
+	ws.onmessage = e => onFrame(String(e.data));
+	ws.onclose = () => {
+		loggedIn = false;
+		$('play').disabled = true;
+		setStatus('切断されました。3 秒後につなぎ直します');
+		setTimeout(connect, 3000);
+	};
+}
+function send(roomid, text) {
+	if (ws && ws.readyState === WebSocket.OPEN) ws.send(`${roomid}|${text}`);
+}
+function wantName() {
+	let n = $('name').value.trim() || store.get('mj.name', '');
+	if (!n || !toID(n)) n = 'player' + Math.floor(1000 + Math.random() * 9000);
+	$('name').value = n;
+	return n;
+}
+function login() {
+	const n = wantName();
+	store.set('mj.name', n);
+	send('', `/trn ${n},0,`);
+}
+
+function onFrame(data) {
+	let roomid = '';
+	let lines = data.split('\n');
+	if (lines[0].startsWith('>')) {
+		roomid = lines[0].slice(1).trim();
+		lines = lines.slice(1);
+	}
+	for (const line of lines) {
+		if (!line.startsWith('|')) continue;
+		try {
+			onLine(roomid, line);
+		} catch (err) {
+			console.error(err, line);
+		}
+	}
+	render();
+}
+
+function onLine(roomid, line) {
+	const parts = line.slice(1).split('|');
+	const cmd = parts[0];
+	switch (cmd) {
+	case 'challstr': login(); return;
+	case 'updateuser': {
+		const name = parts[1].replace(/^[^A-Za-z0-9]/, '').trim();
+		if (parts[2] === '1') {
+			myName = name;
+			loggedIn = true;
+			nameRetries = 0;
+			$('play').disabled = false;
+			setStatus(`${myName} として接続中`);
+		}
+		return;
+	}
+	case 'nametaken': {
+		// 同じ名前が別のタブ・端末で使用中なら、末尾に数字を足して 3 回までやり直す
+		toast(`名前を使えません: ${parts.slice(2).join('|') || parts[1]}`);
+		if (!loggedIn && nameRetries < 3) {
+			nameRetries++;
+			const base = ($('name').value.trim() || 'player').replace(/-\d+$/, '').slice(0, 13);
+			$('name').value = `${base}-${Math.floor(10 + Math.random() * 90)}`;
+			login();
+		}
+		return;
+	}
+	case 'popup': toast(parts.slice(1).join('|').replace(/\|\|/g, '\n')); return;
+	case 'error': log(parts.slice(1).join('|'), 'e'); toast(parts.slice(1).join('|')); return;
+	case 'init':
+		if (roomid.startsWith('mahjong-')) startTable(roomid);
+		return;
+	case 'deinit':
+		if (roomid === room) setStatus(`${myName} として接続中 (卓は閉じました)`);
+		return;
+	case 'request':
+		if (roomid.startsWith('mahjong-')) onRequest(roomid, JSON.parse(parts.slice(1).join('|')));
+		return;
+	case 'mj':
+		onMj(roomid, parts.slice(1));
+		return;
+	}
+}
+
+function startTable(roomid) {
+	if (room === roomid) return;
+	room = roomid;
+	T = freshTable();
+	req = null; advice = null; adviceWaiting = false; practice = false; advisorUp = false; riichiMode = false;
+	$('result').hidden = true;
+	$('log').textContent = '';
+}
+
+function onRequest(roomid, r) {
+	startTable(roomid);
+	req = r;
+	advice = null;
+	adviceWaiting = !!r.advice;
+	practice = !!r.practice;
+	riichiMode = false;
+	const st = r.state;
+	const tb = st.table;
+	T.me = st.seat;
+	Object.assign(T, {
+		label: tb.round_label, honba: tb.honba, kyotaku: tb.kyotaku, dealer: tb.dealer, scores: tb.scores.slice(),
+		wall: tb.wall, dora: tb.dora_indicators.slice(), hand: st.hand.slice(), drawn: st.drawn, melds: st.melds,
+		rivers: st.rivers, riichi: st.riichi.slice(), started: true,
+	});
+	if (r.type === 'discard') T.turn = T.me;
+}
+
+function onMj(roomid, p) {
+	const ev = p[0];
+	if (ev === 'table') { if (p[1]) startTable(p[1]); return; }
+	if (ev === 'searching' || ev === 'cancelled') return;
+	if (ev === 'advicemode') { adviceOn = p[1] === 'on'; return; }
+	if (roomid && room && roomid !== room) return;
+	switch (ev) {
+	case 'init': {
+		startTable(roomid);
+		T.names = p[1].split(',');
+		const i = T.names.findIndex(n => toID(n) === toID(myName));
+		T.me = i >= 0 ? i : 0;
+		log(`卓: ${T.names.join(' / ')}`);
+		break;
+	}
+	case 'practice':
+		practice = true;
+		advisorUp = p[1] === 'advice';
+		if (!advisorUp) log('この卓は練習卓ですが、サーバーに助言役が設定されていません (MJ_ADVISOR)');
+		else if (!adviceOn) send(room, '/mj advice off');
+		break;
+	case 'kyoku': {
+		const scores = p[6].split(',').map(Number);
+		Object.assign(T, {
+			label: p[1], honba: +p[3], kyotaku: +p[4], dealer: seatOf(p[5]), scores, dora: p[7] ? p[7].split(',') : [],
+			rivers: [[], [], [], []], melds: [[], [], [], []], riichi: [false, false, false, false], hand: [], drawn: null,
+			wall: null, turn: null, started: true,
+		});
+		log(`${p[1]}${+p[3] ? ` ${p[3]}本場` : ''}  親: ${nameOf(T.dealer)}`, 'k');
+		break;
+	}
+	case 'draw':
+		T.turn = seatOf(p[1]);
+		T.wall = +p[2];
+		break;
+	case 'discard': {
+		const s = seatOf(p[1]);
+		const tile = p[2];
+		const riichi = p[4] === 'riichi';
+		T.rivers[s].push({ tile, tsumogiri: p[3] === 'tsumogiri', riichi, called: false });
+		if (s === T.me) removeFromHand(tile);
+		if (riichi) log(`${relName(s)}: 打${tileText(tile)} で立直`);
+		break;
+	}
+	case 'riichi': {
+		const s = seatOf(p[1]);
+		T.riichi[s] = true;
+		T.scores = p[2].split(',').map(Number);
+		T.kyotaku = +p[3];
+		break;
+	}
+	case 'call': {
+		const s = seatOf(p[1]);
+		const f = seatOf(p[4]);
+		const tiles = p[3].split(',');
+		const river = T.rivers[f];
+		const taken = river.length ? river[river.length - 1] : null;
+		if (taken) taken.called = true;
+		T.melds[s].push({ kind: p[2], tiles, called: taken ? taken.tile : null, from: f });
+		if (s === T.me) {
+			let skip = taken ? taken.tile : null;
+			for (const t of tiles) {
+				if (skip && t === skip) { skip = null; continue; }
+				removeFromHand(t, true);
+			}
+		}
+		T.turn = s;
+		log(`${relName(s)}: ${CALL_JA[p[2]] || p[2]} ${tiles.map(tileText).join(' ')}`);
+		break;
+	}
+	case 'win': {
+		const s = seatOf(p[1]);
+		const how = p[2] === 'tsumo' ? 'ツモ' : `ロン (${relName(seatOf(p[2]))} から)`;
+		const pay = p[6] ? p[6].split(',').map(Number) : [];
+		log(`${relName(s)}: ${how} ${tileText(p[3])}  ${p[4]}  ${p[5] ? '[' + p[5].split(',').join('・') + ']' : ''}`);
+		if (pay.length === 4) log('  ' + pay.map((v, i) => `${nameOf(i)} ${v > 0 ? '+' : ''}${v}`).join(' / '));
+		req = null;
+		break;
+	}
+	case 'ryuukyoku': {
+		const tenpai = p[1].split(',').map((x, i) => (x === '1' ? nameOf(i) : null)).filter(Boolean);
+		log(`流局  聴牌: ${tenpai.length ? tenpai.join('・') : 'なし'}`);
+		req = null;
+		break;
+	}
+	case 'end':
+		T.scores = p[1].split(',').map(Number);
+		break;
+	case 'gameend':
+		req = null;
+		showResult(JSON.parse(p.slice(1).join('|')));
+		break;
+	case 'advice': {
+		const a = JSON.parse(p.slice(1).join('|'));
+		if (req && a.rqid === req.rqid) {
+			advice = a;
+			adviceWaiting = false;
+		}
+		break;
+	}
+	}
+}
+
+function removeFromHand(tile, keepDrawn) {
+	const all = T.hand.slice();
+	let i = all.indexOf(tile);
+	if (i < 0) i = all.findIndex(t => sameKind(t, tile));
+	if (i >= 0) all.splice(i, 1);
+	T.hand = all.sort((a, b) => tileSortKey(a) - tileSortKey(b));
+	if (!keepDrawn) T.drawn = null;
+}
+
+// ---- 操作 ----
+function choose(choice) {
+	if (!req) return;
+	send(room, `/choose ${req.rqid} ${choice}`);
+	req = null;
+	advice = null;
+	adviceWaiting = false;
+	riichiMode = false;
+	render();
+}
+
+function recommendedTile() {
+	if (!advice || !advice.ok || !advice.choice || !advice.choice.startsWith('discard ')) return null;
+	return advice.choice.split(/\s+/)[1];
+}
+
+function legalDiscard(tile) {
+	if (!req || req.type !== 'discard') return false;
+	const forbidden = req.state.forbidden || [];
+	const hand = T.hand;
+	const blocked = forbidden.some(f => sameKind(f, tile)) && hand.some(t => !forbidden.some(f => sameKind(f, t)));
+	if (blocked) return false;
+	if (riichiMode) return (req.can_riichi || []).some(t => t === tile || sameKind(t, tile));
+	return true;
+}
+
+// ---- 描画 ----
+function render() {
+	renderBoard();
+	renderHand();
+	renderActions();
+	renderAdvice();
+}
+
+function renderBoard() {
+	const c = $('center');
+	c.textContent = '';
+	if (!T.started) {
+		c.append(el('div', 'label', '待機中'), el('div', 'sub', '「練習対局を始める」で、ボット 3 人と打ちます'));
+	} else {
+		c.append(el('div', 'label', T.label || ''));
+		c.append(el('div', 'sub', `供託 ${T.kyotaku}・残り ${T.wall ?? '-'} 枚`));
+		const dora = el('div', 'dora');
+		for (const d of T.dora) dora.append(tileEl(d, { small: true }));
+		c.append(el('div', 'sub', 'ドラ表示牌'), dora);
+	}
+	for (let rel = 0; rel < 4; rel++) {
+		const seat = (T.me + rel) % 4;
+		const box = $(`seat-${rel}`);
+		box.textContent = '';
+		box.classList.toggle('turn', T.started && T.turn === seat);
+		if (!T.started && !T.names[seat]) continue;
+		const who = el('div', 'who');
+		who.append(el('span', 'wind', WINDS[(seat - T.dealer + 4) % 4]), el('span', '', seat === T.me ? `${nameOf(seat)} (自分)` : nameOf(seat)),
+			el('span', 'score', String(T.scores[seat] ?? '')));
+		if (T.riichi[seat]) who.append(el('span', 'mark', '立直'));
+		box.append(who);
+		const river = el('div', 'river');
+		for (const r of T.rivers[seat] || []) {
+			const t = tileEl(r.tile, { small: true });
+			if (r.tsumogiri) t.classList.add('tsumogiri');
+			if (r.riichi) t.classList.add('riichi');
+			if (r.called) t.classList.add('called');
+			river.append(t);
+		}
+		box.append(river);
+		if ((T.melds[seat] || []).length) {
+			const melds = el('div', 'melds');
+			for (const m of T.melds[seat]) {
+				const g = el('span', 'meld');
+				g.title = CALL_JA[m.kind] || m.kind;
+				for (const t of m.tiles) g.append(tileEl(t, { small: true }));
+				melds.append(g);
+			}
+			box.append(melds);
+		}
+	}
+}
+
+function renderHand() {
+	const box = $('hand');
+	box.textContent = '';
+	const rec = recommendedTile();
+	let marked = false;
+	const hand = T.hand.slice();
+	let drawn = null;
+	if (T.drawn) {
+		const i = hand.indexOf(T.drawn);
+		if (i >= 0) hand.splice(i, 1);
+		drawn = T.drawn;
+	}
+	const add = t => {
+		const b = tileEl(t, { button: true });
+		b.disabled = !legalDiscard(t);
+		if (rec && !marked && (t === rec || (sameKind(t, rec) && !hand.concat(drawn ? [drawn] : []).includes(rec)))) {
+			b.classList.add('rec');
+			marked = true;
+		}
+		b.onclick = () => choose(`discard ${t}` + (riichiMode ? ' riichi' : ''));
+		box.append(b);
+	};
+	hand.forEach(add);
+	if (drawn) {
+		box.append(el('span', 'gap'));
+		add(drawn);
+	}
+	const melds = T.melds[T.me] || [];
+	if (melds.length) {
+		box.append(el('span', 'gap'));
+		for (const m of melds) {
+			const g = el('span', 'meld');
+			for (const t of m.tiles) g.append(tileEl(t, { small: true }));
+			box.append(g, el('span', 'gap'));
+		}
+	}
+}
+
+function renderActions() {
+	const box = $('actions');
+	box.textContent = '';
+	if (!req) {
+		box.append(el('span', 'hint', T.started ? '相手の番です' : '対局が始まると、ここに手牌と操作が出ます'));
+		return;
+	}
+	const follow = advice && advice.ok && advice.choice;
+	if (req.type === 'discard') {
+		box.append(el('span', 'hint', riichiMode ? '立直: 切る牌を選んでください' : '切る牌を選んでください'));
+		if ((req.can_riichi || []).length) {
+			const b = el('button', riichiMode ? 'on' : '', riichiMode ? '立直を取り消す' : '立直する');
+			b.onclick = () => { riichiMode = !riichiMode; render(); };
+			box.append(b);
+		}
+	} else if (req.type === 'call') {
+		box.append(el('span', 'hint', `${relName(req.from)} の ${tileText(req.tile)} を鳴けます`));
+		req.options.forEach((o, i) => {
+			const b = el('button', '', o.label || `${CALL_JA[o.kind] || o.kind} ${o.tiles.join(' ')}`);
+			b.onclick = () => choose(`call ${i}`);
+			box.append(b);
+		});
+		const pass = el('button', 'ghost', '鳴かない');
+		pass.style.color = 'inherit';
+		pass.style.borderColor = 'var(--line)';
+		pass.onclick = () => choose('pass');
+		box.append(pass);
+	} else if (req.type === 'win') {
+		box.append(el('span', 'hint', `${req.kind === 'tsumo' ? 'ツモ' : 'ロン'}和了できます: ${tileText(req.tile)} ${req.label || ''}`));
+		const w = el('button', 'primary', '和了する');
+		w.onclick = () => choose('win');
+		const pass = el('button', 'ghost', '見送る');
+		pass.style.color = 'inherit';
+		pass.style.borderColor = 'var(--line)';
+		pass.onclick = () => choose('pass');
+		box.append(w, pass);
+	}
+	if (follow) {
+		const b = el('button', 'primary', `推奨で打つ (${describeChoice(advice.choice)})`);
+		b.title = 'Enter キーでも同じ';
+		b.onclick = () => choose(advice.choice);
+		box.append(b);
+	}
+}
+
+function describeChoice(choice) {
+	const p = choice.split(/\s+/);
+	if (p[0] === 'discard') return `打${tileText(p[1])}${p[2] === 'riichi' ? ' 立直' : ''}`;
+	if (p[0] === 'call' && req && req.options && req.options[+p[1]]) return req.options[+p[1]].label || '鳴く';
+	if (p[0] === 'pass') return req && req.type === 'win' ? '見送る' : '鳴かない';
+	if (p[0] === 'win') return '和了';
+	return choice;
+}
+
+function fmtStat(key, v) {
+	const kind = (STAT[key] || [key, ''])[1];
+	if (typeof v !== 'number') return String(v);
+	if (kind === 'pct') return `${(v * 100).toFixed(1)}%`;
+	if (kind === 'ev') return `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
+	return String(v);
+}
+
+function renderAdvice() {
+	$('advice-on').checked = adviceOn;
+	const box = $('advice');
+	box.textContent = '';
+	if (!adviceOn) { box.append(el('div', 'note', '助言は非表示です')); return; }
+	if (T.started && !practice) { box.append(el('div', 'note', 'この卓には人が 2 人以上いるため、助言は出ません')); return; }
+	if (T.started && practice && !advisorUp && !(req && req.advice)) {
+		box.append(el('div', 'note', 'サーバーに助言役が設定されていません (MJ_ADVISOR)'));
+		return;
+	}
+	if (!req) {
+		box.append(el('div', 'note', T.started ? '自分の番になると、ここに助言が出ます' : '練習卓 (自分 + ボット 3 人) で、助言役がつながっているときに出ます。人が 2 人以上いる卓では出ません。'));
+		return;
+	}
+	if (adviceWaiting) { box.append(el('div', 'note', '助言を計算しています…')); return; }
+	if (!advice) { box.append(el('div', 'note', '助言はありません')); return; }
+	if (!advice.ok) { box.append(el('div', 'err', `助言役のエラー: ${advice.error || '不明'}`)); return; }
+	box.append(el('div', 'headline', prettyTiles(advice.headline || describeChoice(advice.choice || ''))));
+	const cands = advice.candidates || [];
+	if (cands.length) {
+		const keys = [];
+		for (const c of cands) for (const k of Object.keys(c.stats || {})) if (!keys.includes(k)) keys.push(k);
+		const plans = cands.some(c => c.plan);
+		const table = el('table');
+		const head = el('tr');
+		head.append(el('th', '', '候補'));
+		if (plans) head.append(el('th', '', '方針'));
+		for (const k of keys) head.append(el('th', 'num', (STAT[k] || [k])[0]));
+		table.append(head);
+		cands.forEach(c => {
+			const tr = el('tr', c.choice && advice.choice && advice.choice.startsWith(c.choice) ? 'best' : '');
+			tr.append(el('td', '', c.label ? prettyTiles(c.label) : describeChoice(c.choice || '')));
+			if (plans) tr.append(el('td', '', c.plan || ''));
+			for (const k of keys) tr.append(el('td', 'num', c.stats && k in c.stats ? fmtStat(k, c.stats[k]) : ''));
+			table.append(tr);
+		});
+		box.append(table);
+	}
+	if ((advice.lines || []).length) {
+		const ul = el('ul');
+		for (const l of advice.lines) ul.append(el('li', '', prettyTiles(l)));
+		box.append(ul);
+	}
+	const meta = [advice.name, typeof advice.ms === 'number' ? `${(advice.ms / 1000).toFixed(1)} 秒` : null].filter(Boolean).join('・');
+	if (meta) box.append(el('div', 'note', meta));
+}
+
+function showResult(r) {
+	const body = $('result-body');
+	body.textContent = '';
+	if (r.crashed) {
+		body.append(el('p', '', `卓が止まりました: ${r.reason || ''}`));
+	} else {
+		const order = [0, 1, 2, 3].sort((a, b) => r.ranks[a] - r.ranks[b]);
+		const table = el('table');
+		const head = el('tr');
+		head.append(el('th', '', '順位'), el('th', '', '名前'), el('th', '', '点数'), el('th', '', '順位点'));
+		table.append(head);
+		for (const s of order) {
+			const tr = el('tr');
+			tr.append(el('td', '', `${r.ranks[s]} 位`), el('td', '', s === T.me ? `${r.names[s]} (自分)` : r.names[s]),
+				el('td', 'num', String(r.scores[s])), el('td', 'num', r.points ? String(r.points[s]) : ''));
+			table.append(tr);
+		}
+		body.append(table);
+	}
+	$('result').hidden = false;
+	log('終局', 'k');
+}
+
+// ---- 画面の部品 ----
+$('name').value = store.get('mj.name', '');
+$('login').onclick = () => { if (ws && ws.readyState === WebSocket.OPEN) login(); };
+$('play').onclick = () => send('', '/mj play');
+$('again').onclick = () => { $('result').hidden = true; send('', '/mj play'); };
+$('close-result').onclick = () => { $('result').hidden = true; };
+$('advice-on').onchange = e => {
+	adviceOn = e.target.checked;
+	store.set('mj.advice', adviceOn ? '1' : '0');
+	if (room && practice) send(room, `/mj advice ${adviceOn ? 'on' : 'off'}`);
+	render();
+};
+document.addEventListener('keydown', e => {
+	if (e.target && e.target.tagName === 'INPUT') return;
+	if (e.key === 'Enter' && req && advice && advice.ok && advice.choice) {
+		e.preventDefault();
+		choose(advice.choice);
+	}
+});
+connect();
+render();
 </script>
-<p>This is a <a href="http://www.pokemonshowdown.com">Pok&eacute;mon Showdown</a> server!</p>
-<noscript><p>You'll need to <a href="http://enable-javascript.com/en/">enable JavaScript</a> to play.</p></noscript>
+</body>
+</html>

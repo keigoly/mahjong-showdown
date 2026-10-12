@@ -33,6 +33,22 @@ Your own bot classes can play too: `--challenger "py:mybots.nn:NetPlayer?model=/
 For long self-play runs, start the server with `MJ_LOG_EVERY=50` to keep one table log in 50
 (logs go to `server/logs/mahjong/<YYYY-MM>/`, about 8 KB each; `0` keeps none).
 
+## Play in the browser (practice tables with advice)
+
+The server also serves a table client: open `http://localhost:8000/` and press 「練習対局を始める」 to play against
+three simulator bots (`/mj play`). It works on phones and tablets too (the hand stays at the bottom of the screen).
+
+On practice tables (one person + three simulator bots) the server can ask an **advisor** for each of your decisions and
+show its answer only to you. Start an advisor and tell the server where it is:
+
+```bash
+cd sim && uv run python -m mjsim.advisor --port 8787          # example advisor: the efficiency bot
+cd server && MJ_ADVISOR=http://127.0.0.1:8787/advise node pokemon-showdown start 8000 --no-security
+```
+
+Tables with two or more people never get advice. Any program that answers the advisor protocol
+([sim/PROTOCOL.md](sim/PROTOCOL.md#advisor)) can be the advisor, so you can practice with your own AI's opinion.
+
 ## Writing a bot
 
 ```python
@@ -78,3 +94,13 @@ AI 同士の大量の自己対戦で、打ち方を比べたり鍛えたりす�
 配牌・ツモの運が打ち消され、打ち方の差だけが平均順位に出ます (同じ強さなら 2.5)。
 自作のボットは `py:モジュール:クラス?名前=値;名前=値` で指定できます (? の後ろはクラスの引数)。
 大量の自己対戦では `MJ_LOG_EVERY=50` でサーバーを起動すると、牌譜を 50 卓に 1 つだけ残します。
+
+### ブラウザで打つ (練習卓と助言)
+
+サーバーは対局画面も配ります。`http://localhost:8000/` を開いて「練習対局を始める」を押すと、シミュレーターのボット
+3 人と打てます (`/mj play`)。スマートフォンやタブレットでも使えます (手牌は画面の下に固定)。
+
+練習卓 (人 1 人 + シミュレーターのボット 3 人) では、サーバーが判断のたびに **助言役** へ問い合わせ、その答えを本人に
+だけ見せます。助言役を起動し、サーバーに `MJ_ADVISOR` で場所を教えてください
+(見本は `python -m mjsim.advisor`・牌効率のボット)。人が 2 人以上いる卓には助言を出しません。
+助言役のやり取りの形 ([sim/PROTOCOL.md](sim/PROTOCOL.md#advisor)) で答えるプログラムなら何でも助言役にできます。
