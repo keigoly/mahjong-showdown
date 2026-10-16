@@ -59,6 +59,12 @@ function advisorUrl(): string {
 	return process.env.MJ_ADVISOR || (Config as AnyObject).mjadvisor || '';
 }
 
+/** Who sits in the empty seats of a table: the simulator's efficiency bot, or an outside player over HTTP
+ * (MJ_PRACTICE_BOT=http://…, see sim/PROTOCOL.md "Bots over HTTP"). */
+function seatBot(): string {
+	return process.env.MJ_PRACTICE_BOT || (Config as AnyObject).mjpracticebot || 'efficiency';
+}
+
 function simPython(): string {
 	if (process.env.MJSIM_PYTHON) return process.env.MJSIM_PYTHON;
 	const venv = process.platform === 'win32' ?
@@ -170,7 +176,7 @@ export class MahjongTable extends Rooms.RoomGame<MahjongPlayer> {
 		this.playerCap = 4;
 		this.tableId = room.roomid;
 		this.seed = options.seed ?? Math.floor(Math.random() * 2 ** 31);
-		this.bots = users.map(u => (u ? null : 'efficiency'));
+		this.bots = users.map(u => (u ? null : seatBot()));
 		this.practice = users.filter(u => u).length === 1;
 		const names: string[] = [];
 		users.forEach((user, seat) => {

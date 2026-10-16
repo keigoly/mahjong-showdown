@@ -5,6 +5,7 @@
 入力 (サーバー → シミュレーター):
     {"type": "start", "id": "t1", "names": ["a","b","c","d"], "seed": 1, "rules": "tenhou-houou",
      "calls": true, "timeout": 60, "bots": [null, null, "efficiency", null]}   # bots の席は内部の打ち手
+       (bots の値: "efficiency" = 牌効率のボット・"random"・"http://…" = 外の打ち手 (判断のたびに要求を POST する))
     {"type": "choose", "id": "t1", "player": 0, "rqid": 5, "choice": "discard 5p riichi"}
     {"type": "autoplay", "id": "t1", "player": 2, "on": true}                  # 切断などで代打ちに任せる
     {"type": "stop", "id": "t1"}
@@ -25,6 +26,7 @@ import queue
 import sys
 import threading
 import traceback
+import urllib.request
 
 from .agents import EfficiencyAgent, RandomAgent
 from .engine import CallOption, Game, QuitGame, View, WinInfo
@@ -162,6 +164,40 @@ class RemoteAgent:
         pass
 
 
+class HttpAgent(RemoteAgent):
+    """外の打ち手 (bots の席に "http://…" と書いたとき)。判断のたびに要求を URL へ POST し、答えの choice で打つ。
+    送る形は助言役 (PROTOCOL.md の Advisor) と同じ {"rqid", "request"} に、卓と席 ("table", "seat") を足したもの。
+    答えが来ない・おかしいときは、その手だけ牌効率のボットの手で進める (誤りは標準エラーに数件だけ出す)。"""
+
+    TIMEOUT_S = 10.0
+
+    def __init__(self, table: "Table", seat: int, name: str, url: str):
+        super().__init__(table, seat, name)
+        self.url = url
+        self.autoplay = True  # RemoteAgent で、答えが無い (None) ときに代打ちの手にする
+        self.failures = 0
+
+    def _ask(self, kind: str, view: View, extra: dict, parse):
+        if self.table.stopped:
+            raise QuitGame()
+        self.rqid += 1
+        req = {"type": kind, "rqid": self.rqid, "state": view.to_dict(), **extra}
+        body = json.dumps({"rqid": self.rqid, "table": self.table.id, "seat": self.seat, "request": req},
+                          ensure_ascii=False).encode("utf-8")
+        try:
+            r = urllib.request.Request(self.url, data=body, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(r, timeout=self.TIMEOUT_S) as resp:
+                out = json.loads(resp.read() or b"{}")
+            if not out.get("ok"):
+                raise ValueError(out.get("error") or "ok が false")
+            return parse(str(out["choice"]))
+        except Exception as e:  # noqa: BLE001  外の打ち手の不具合で卓を止めない
+            self.failures += 1
+            if self.failures <= 3:
+                print(f"bot {self.url} (卓 {self.table.id} 席 {self.seat}): {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            return None
+
+
 class Table:
     def __init__(self, msg: dict):
         self.id = msg["id"]
@@ -173,6 +209,8 @@ class Table:
         for seat in range(4):
             if bots[seat] == "random":
                 self.agents.append(RandomAgent(names[seat], seed=msg.get("seed")))
+            elif isinstance(bots[seat], str) and bots[seat].startswith(("http://", "https://")):
+                self.agents.append(HttpAgent(self, seat, names[seat], bots[seat]))
             elif bots[seat]:
                 self.agents.append(EfficiencyAgent(names[seat]))
             else:

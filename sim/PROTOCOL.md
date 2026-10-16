@@ -89,6 +89,21 @@ POST {MJ_ADVISOR}            {"rqid": 7, "request": {…the request JSON above�
 The server waits up to `MJ_ADVISOR_TIMEOUT_MS` (default 30000) and drops answers that arrive after the person chose.
 `python -m mjsim.advisor` is an example advisor (the efficiency bot). `GET /health` answers `{"ok": true, "name": …}`.
 
+## Bots over HTTP
+
+An empty seat can be played by an outside program instead of the efficiency bot: set `MJ_PRACTICE_BOT=http://…`
+(or `Config.mjpracticebot`) on the server, or put the URL in the simulator's `bots` list. For every decision of that
+seat the simulator POSTs the same body as to an advisor, plus the table id and the seat, and plays `choice`:
+
+```
+POST {MJ_PRACTICE_BOT}       {"rqid": 7, "table": "mahjong-1", "seat": 2, "request": {…the request JSON above…}}
+→ 200 {"ok": true, "choice": "discard 5p"}
+```
+
+If the answer does not come within 10 seconds, or is not a valid choice, that one decision is played by the efficiency
+bot (the first few failures are written to the simulator's stderr). A table with one person and HTTP bots is still a
+practice table, so the person gets advice as usual.
+
 ## Server ⇄ simulator (`python -m mjsim.stream`, JSON lines on stdin/stdout)
 
 In: `{"type":"start","id":T,"names":[…],"seed":N,"rules":"tenhou-houou","calls":true,"timeout":60,"bots":[null,…]}`,
