@@ -76,7 +76,8 @@ aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .panel h2 .grow { flex: 1; }
 .panel .note { font-size: 13px; color: var(--muted); }
 #advice .headline { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
-#advice table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+#advice .wide { overflow-x: auto; }  /* 列が多い (和了・放銃・連対・4位・期待値・AI) ので、狭い画面では横に送る */
+#advice table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #advice th, #advice td { text-align: left; padding: 3px 4px; border-bottom: 1px solid var(--line); }
 #advice td.num, #advice th.num { text-align: right; }
 #advice tr.best td { font-weight: 700; }
@@ -674,7 +675,9 @@ function renderAdvice() {
 			for (const k of keys) tr.append(el('td', 'num', c.stats && k in c.stats ? fmtStat(k, c.stats[k]) : ''));
 			table.append(tr);
 		});
-		box.append(table);
+		const wide = el('div', 'wide');
+		wide.append(table);
+		box.append(wide);
 	}
 	if ((advice.lines || []).length) {
 		const ul = el('ul');
