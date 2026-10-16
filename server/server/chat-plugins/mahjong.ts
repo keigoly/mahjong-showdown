@@ -54,6 +54,9 @@ const LOG_DIR = path.join(process.cwd(), 'logs', 'mahjong');
 const LOG_EVERY = Number(process.env.MJ_LOG_EVERY ?? 1);
 let finishedTables = 0;
 const ADVISOR_TIMEOUT_MS = Number(process.env.MJ_ADVISOR_TIMEOUT_MS || 30000);
+// Ask the advisor in two stages (MJ_ADVISOR_STAGED, on unless "0"): a quick answer first ("mode": "fast"), then the full
+// one ("mode": "full"), so the person sees a recommendation at once and the refined numbers a moment later.
+const ADVISOR_STAGED = (process.env.MJ_ADVISOR_STAGED ?? '1') !== '0';
 
 function advisorUrl(): string {
 	return process.env.MJ_ADVISOR || (Config as AnyObject).mjadvisor || '';
@@ -208,23 +211,29 @@ export class MahjongTable extends Rooms.RoomGame<MahjongPlayer> {
 		return this.practice && player.advice && !!advisorUrl();
 	}
 
-	/** 助言役に要求を送り、答えをその選手にだけ送る。答える前に選手が打ったら捨てる。 */
+	/** 助言役に要求を送り、答えをその選手にだけ送る。答える前に選手が打ったら捨てる。
+	 * 2 段 (ADVISOR_STAGED): 速い答え (fast) を先に送り、続けて精密な答え (full) で置き換える。fast の答えが final なら
+	 * (鳴き・和了など、速い計算と同じ) 2 回目は聞かない。full が誤りなら fast の答えを残す。 */
 	async advise(player: MahjongPlayer, rqid: number, request: AnyObject) {
-		let advice: AnyObject;
 		const t0 = Date.now();
-		try {
-			const res = await fetch(advisorUrl(), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ rqid, request: { rqid, ...request } }),
-				signal: AbortSignal.timeout(ADVISOR_TIMEOUT_MS),
-			});
-			advice = res.ok ? await res.json() : { ok: false, error: `advisor returned HTTP ${res.status}` };
-		} catch (err: any) {
-			advice = { ok: false, error: err?.name === 'TimeoutError' ? 'advisor timed out' : `advisor unavailable (${err?.message})` };
+		for (const mode of ADVISOR_STAGED ? ['fast', 'full'] : [null]) {
+			let advice: AnyObject;
+			try {
+				const res = await fetch(advisorUrl(), {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ rqid, request: { rqid, ...request }, ...(mode ? { mode } : {}) }),
+					signal: AbortSignal.timeout(ADVISOR_TIMEOUT_MS),
+				});
+				advice = res.ok ? await res.json() : { ok: false, error: `advisor returned HTTP ${res.status}` };
+			} catch (err: any) {
+				advice = { ok: false, error: err?.name === 'TimeoutError' ? 'advisor timed out' : `advisor unavailable (${err?.message})` };
+			}
+			if (this.ended || player.pending?.rqid !== rqid) return;
+			if (mode === 'full' && !advice.ok) return;
+			player.sendRoom(`|mj|advice|${JSON.stringify({ ...advice, rqid, wait_ms: Date.now() - t0, ...(mode ? { stage: mode } : {}) })}`);
+			if (!advice.ok || advice.final) return;
 		}
-		if (this.ended || player.pending?.rqid !== rqid) return;
-		player.sendRoom(`|mj|advice|${JSON.stringify({ ...advice, rqid, wait_ms: Date.now() - t0 })}`);
 	}
 
 	override makePlayer(user: User | string | null) {

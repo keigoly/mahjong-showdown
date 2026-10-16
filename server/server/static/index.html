@@ -683,6 +683,7 @@ function renderAdvice() {
 	}
 	const meta = [advice.name, typeof advice.ms === 'number' ? `${(advice.ms / 1000).toFixed(1)} 秒` : null].filter(Boolean).join('・');
 	if (meta) box.append(el('div', 'note', meta));
+	if (advice.stage === 'fast' && !advice.final) box.append(el('div', 'note', '速い計算の答えです。精密な計算の答えが来たら置き換えます'));
 }
 
 function showResult(r) {

@@ -87,6 +87,10 @@ POST {MJ_ADVISOR}            {"rqid": 7, "request": {…the request JSON above�
 `lines` are optional; the client shows `win`/`dealin`/`rentai` (finishing 1st or 2nd)/`last` (finishing 4th)/`top`
 (finishing 1st)/`ai` (how likely a learned net is to pick it) as percentages, `ev` with a sign and the others as they are.
 The server waits up to `MJ_ADVISOR_TIMEOUT_MS` (default 30000) and drops answers that arrive after the person chose.
+By default the server asks twice (`MJ_ADVISOR_STAGED`, on unless `0`): first with `"mode": "fast"` (a quick answer,
+shown at once), then with `"mode": "full"` (replaces it). An answer with `"final": true` (for example a call, where the
+quick answer is already the full one) ends it early; a failed full answer keeps the quick one. Advisors that ignore
+`mode` just answer twice. The `|mj|advice|` message carries `"stage": "fast"|"full"`.
 `python -m mjsim.advisor` is an example advisor (the efficiency bot). `GET /health` answers `{"ok": true, "name": …}`.
 
 ## Bots over HTTP
