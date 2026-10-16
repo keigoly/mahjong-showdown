@@ -84,7 +84,7 @@ POST {MJ_ADVISOR}            {"rqid": 7, "request": {…the request JSON above�
 ```
 
 `choice` is a valid answer to the request (the client offers it as 「推奨で打つ」). `candidates`, `stats`, `plan` and
-`lines` are optional; the client shows `win`/`dealin`/`rentai` (finishing 1st or 2nd)/`last` (finishing 4th)/`top`
+`lines` are optional; the client shows `win`/`dealin`/`danger` (this tile deals in now)/`rentai` (finishing 1st or 2nd)/`last` (finishing 4th)/`top`
 (finishing 1st)/`ai` (how likely a learned net is to pick it) as percentages, `ev` with a sign and the others as they are.
 The server waits up to `MJ_ADVISOR_TIMEOUT_MS` (default 30000) and drops answers that arrive after the person chose.
 By default the server asks twice (`MJ_ADVISOR_STAGED`, on unless `0`): first with `"mode": "fast"` (a quick answer,
