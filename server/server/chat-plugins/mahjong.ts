@@ -25,6 +25,10 @@
  * `python -m mjsim.advisor`), each request on a practice table (/mj play: one person + 3 simulator bots) is also
  * sent to the advisor, and its answer goes to that player only. Tables with two or more people never get advice.
  *
+ * Rules of practice tables: MJ_PRACTICE_RULES (or Config.mjpracticerules) names the rank points the result is counted
+ * in (a preset of sim/src/mjsim/rules.py, e.g. tenhou-joukyuu:2). Give it the same rules as the advisor, so the result
+ * screen and the advice count the same points. Default: tenhou-houou.
+ *
  * Derived from Pokémon Showdown's RoomGame plumbing (MIT). See NOTICE in the repository root.
  */
 
@@ -66,6 +70,11 @@ function advisorUrl(): string {
  * (MJ_PRACTICE_BOT=http://…, see sim/PROTOCOL.md "Bots over HTTP"). */
 function seatBot(): string {
 	return process.env.MJ_PRACTICE_BOT || (Config as AnyObject).mjpracticebot || 'efficiency';
+}
+
+/** The rank points a practice table (/mj play) is counted in (MJ_PRACTICE_RULES, e.g. tenhou-joukyuu:2). */
+function practiceRules(): string {
+	return process.env.MJ_PRACTICE_RULES || (Config as AnyObject).mjpracticerules || 'tenhou-houou';
 }
 
 function simPython(): string {
@@ -390,7 +399,7 @@ export const commands: Chat.ChatCommands = {
 			this.sendReply(`|mj|table|${table.roomid}|${table.seed}`);
 		},
 		play(target, room, user) {
-			const table = createTable([user, null, null, null], { timeout: 300 });
+			const table = createTable([user, null, null, null], { timeout: 300, rules: practiceRules() });
 			this.sendReply(`|mj|table|${table.roomid}`);
 		},
 		choose(target, room, user) {

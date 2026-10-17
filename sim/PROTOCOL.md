@@ -108,6 +108,13 @@ If the answer does not come within 10 seconds, or is not a valid choice, that on
 bot (the first few failures are written to the simulator's stderr). A table with one person and HTTP bots is still a
 practice table, so the person gets advice as usual.
 
+## Rules of practice tables
+
+A practice table (`/mj play`) is counted in the rank points named by `MJ_PRACTICE_RULES` (or `Config.mjpracticerules`,
+default `tenhou-houou`): a preset of `sim/src/mjsim/rules.py`. Tenhou presets take a dan after a colon
+(`tenhou-joukyuu:2` = 上級卓 二段, `tenhou-houou:10`, `tenhou-joukyuu-tonpuu:1`). Give the server the same rules as the
+advisor, so the result screen counts the same points as the advice.
+
 ## Server ⇄ simulator (`python -m mjsim.stream`, JSON lines on stdin/stdout)
 
 In: `{"type":"start","id":T,"names":[…],"seed":N,"rules":"tenhou-houou","calls":true,"timeout":60,"bots":[null,…]}`,
